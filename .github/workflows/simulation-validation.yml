@@ -1,0 +1,36 @@
+name: Simulation build verification
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ cmake ninja-build python3 git
+      - name: Obtain ns-3.48
+        run: git clone --depth 1 --branch ns-3.48 https://gitlab.com/nsnam/ns-3-dev.git ns-3.48
+      - name: Configure and build ns-3
+        working-directory: ns-3.48
+        run: |
+          ./ns3 configure --enable-modules="core;network;internet;point-to-point;applications;flow-monitor;netanim;mobility" --disable-examples --disable-tests
+          ./ns3 build
+      - name: Compile and run simulation sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp bgp.cc ns-3.48/scratch/bgp.cc
+          cp simulations/*.cc ns-3.48/scratch/
+          cp experiments/routing-mechanisms/static-routing.cc ns-3.48/scratch/static-routing.cc
+          cd ns-3.48
+          for source in bgp bidirectional-traffic routing-mechanisms network-event-analysis routing-evaluation static-routing; do
+            echo "::group::Simulation: $source"
+            ./ns3 run "scratch/$source"
+            echo "::endgroup::"
+          done
